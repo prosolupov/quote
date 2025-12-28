@@ -1,3 +1,5 @@
+use url::Url;
+
 #[derive(Debug, Clone)]
 pub struct StockQuote {
     pub ticker: String,
@@ -39,5 +41,52 @@ impl StockQuote {
         bytes.push(b'|');
         bytes.extend_from_slice(self.timestamp.to_string().as_bytes());
         bytes
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandClient {
+    pub schema: String,
+    pub address: String,
+    pub tickers: Vec<String>,
+}
+
+impl CommandClient {
+    pub fn parse_command(command: &str) -> Result<CommandClient, String> {
+        let command = command.trim();
+
+        let mut parts = command.splitn(2, " ");
+        let url_parts = parts
+            .next()
+            .ok_or(format!("Invalid command: {}", command))?;
+        let args_parts = parts
+            .next()
+            .ok_or(format!("Invalid command: {}", command))?;
+
+        let url = Url::parse(url_parts).map_err(|_| format!("Invalid url: {}", url_parts))?;
+        let schema = url.scheme().to_string();
+
+        let host = url.host_str().ok_or(format!("Invalid host: {}", url))?;
+        let port = url
+            .port_or_known_default()
+            .ok_or(format!("Invalid port: {}", url))?;
+
+        let address = format!("{}:{}", host, port);
+
+        let tickers = args_parts
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+
+        if tickers.is_empty() {
+            return Err(format!("no tickers provided: {}", command));
+        }
+
+        Ok(CommandClient {
+            schema,
+            address,
+            tickers,
+        })
     }
 }
