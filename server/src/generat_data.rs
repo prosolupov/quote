@@ -2,23 +2,33 @@ use crate::models::StockQuote;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct QuoteGenerator {
+/// Генератор псевдослучайных биржевых котировок.
+///
+/// Хранит последнее значение цены для каждого тикера
+/// и использует его для генерации следующей котировки.
+ pub struct QuoteGenerator {
+    /// Последняя сгенерированная цена по каждому тикеру
     last_prices: HashMap<String, f64>,
 }
 
 impl QuoteGenerator {
+    /// Создает новый генератор котировок.
+    ///
+    /// Начальные цены будут инициализированы при первой генерации.
     pub fn new() -> Self {
         Self {
             last_prices: HashMap::new(),
         }
     }
 
+    /// Генерирует новую котировку для указанного тикера.
+    ///
+    /// Цена изменяется на случайное значение в диапазоне `[-1; 1)`,
+    /// но не может опуститься ниже `1.0`.
+    /// Объем зависит от популярности тикера.
     pub fn generate_quote(&mut self, ticker: &str) -> Option<StockQuote> {
-        // ... логика изменения цены ...
+        let last_price = self.last_prices.entry(ticker.to_string()).or_insert(100.0);
 
-        let last_price = self.last_prices.entry(ticker.to_string()).or_insert(100.0); // стартовая цена
-
-        // 🔹 изменение цены (random walk)
         let delta = rand::random::<f64>() * 2.0 - 1.0; // [-1; 1)
         *last_price = (*last_price + delta).max(1.0); // цена не может быть < 1
 
@@ -35,7 +45,7 @@ impl QuoteGenerator {
             volume,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .ok()?
                 .as_millis() as u64,
         })
     }

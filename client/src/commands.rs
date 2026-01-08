@@ -1,15 +1,52 @@
-#[derive(Parser)]
+use clap::Parser;
+
+/// Параметры командной строки для настройки сетевого клиента.
+///
+/// Структура используется для разбора аргументов CLI с помощью `clap`.
+/// Все параметры передаются в виде именованных (`--key value`)
+/// аргументов и не чувствительны к регистру.
+#[derive(Parser, Debug)]
 pub struct CliCommands {
-    #[command(subcommand)]
-    pub command: Commands
-}
+    /// IP-адрес сервера.
+    ///
+    /// Используется для установления соединения с сервером.
+    ///
+    /// # Пример
+    /// ```bash
+    /// --ip-server 127.0.0.1
+    /// ```
+    #[arg(ignore_case = true, long)]
+    pub ip_server: String,
+    /// TCP-порт сервера.
+    ///
+    /// Определяет порт, на котором сервер принимает входящие TCP-соединения.
+    ///
+    /// # Пример
+    /// ```bash
+    /// --port-server 9000
+    /// ```
 
-#[derive(Subcommand)]
-pub enum Commands {
-    Stream {
-        endpoint: String,
-
-        #[arg(value_delimiter=',')]
-        tickets: Vec<String>,
-    }
+    #[arg(ignore_case = true, long)]
+    pub port_server: String,
+    /// UDP-порт для приема или отправки данных.
+    ///
+    /// Используется для обмена данными по протоколу UDP.
+    ///
+    /// # Пример
+    /// ```bash
+    /// --port-udp 9001
+    /// ```
+    #[arg(ignore_case = true, long)]
+    pub port_udp: String,
+    /// Путь к файлу для чтения или записи данных.
+    ///
+    /// Может использоваться для логирования, хранения котировок
+    /// или загрузки конфигурации.
+    ///
+    /// # Пример
+    /// ```bash
+    /// --path-file ./data/quotes.log
+    /// ```
+    #[arg(ignore_case = true, long)]
+    pub path_file: String,
 }
