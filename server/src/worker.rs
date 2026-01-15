@@ -1,6 +1,5 @@
 use crate::models::{CommandClient, Commands, StockQuote};
-use crate::producer::producer;
-use crossbeam::channel::{RecvTimeoutError, unbounded};
+use crossbeam::channel::{Receiver, RecvTimeoutError};
 use std::io::ErrorKind;
 use std::net::UdpSocket;
 use std::thread;
@@ -15,19 +14,13 @@ use std::time::{Duration, Instant};
 /// - принимает `ping`/`pong` сообщения по UDP;
 /// - пересылает сгенерированные котировки на указанный endpoint;
 /// - завершает работу при отсутствии `ping` или остановке производителей.
-pub fn create_worker(command: CommandClient) {
+pub fn create_worker(command: CommandClient, rx: Receiver<StockQuote>) {
     thread::spawn(move || {
         let sender = UdpSocket::bind("0.0.0.0:0").unwrap();
         sender.set_nonblocking(true).unwrap();
 
         match command.command {
             Commands::Stream { endpoint, tickets } => {
-                let (tx, rx) = unbounded::<StockQuote>();
-
-                for ticket in &tickets {
-                    producer(ticket.clone(), tx.clone());
-                }
-
                 let mut buf = [0u8; 256];
                 let mut last_ping = Instant::now();
                 let ping_timeout = Duration::from_secs(6);
@@ -41,58 +34,38 @@ pub fn create_worker(command: CommandClient) {
                                 if msg == b"ping" {
                                     last_ping = Instant::now();
                                     sender.send_to(b"pong", src).unwrap();
-                                    println!("Got ping from {}, sent pong", src);
-                                } else {
-                                    println!(
-                                        "Got UDP from {}: {}",
-                                        src,
-                                        String::from_utf8_lossy(msg)
-                                    );
+                                    tracing::info!("Got ping from {}, sent pong", src);
                                 }
                             }
                             Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                             Err(e) => {
-                                eprintln!("recv_from error: {}", e);
+                                tracing::error!("recv_from error: {}", e);
                                 break;
                             }
                         }
                     }
 
                     if last_ping.elapsed() > ping_timeout {
-                        eprintln!("No ping for {:?}, stop streaming", ping_timeout);
+                        tracing::error!("No ping for {:?}, stop streaming", ping_timeout);
                         break;
                     }
 
                     match rx.recv_timeout(Duration::from_millis(200)) {
-                        Ok(data) => {
-                            sender
-                                .send_to(data.to_string().as_bytes(), &endpoint.address)
-                                .unwrap();
+                        Ok(quote) => {
+                            if tickets.contains(&quote.ticker) {
+                                let msg = format!("{}: {}", quote.ticker, quote.price);
 
-                            println!(
-                                "Sent data to IP {}, ID_process: {:?}",
-                                endpoint.address,
-                                thread::current().id()
-                            );
+                                sender.send_to(msg.as_bytes(), &endpoint.address).unwrap();
+
+                                println!("Sent {} to {}", quote.ticker, endpoint.address);
+                            }
                         }
                         Err(RecvTimeoutError::Timeout) => {}
                         Err(RecvTimeoutError::Disconnected) => {
-                            eprintln!("All producers stopped");
+                            tracing::error!("Generator stopped");
                             break;
                         }
                     }
-                }
-
-                for data in rx.iter() {
-                    sender
-                        .send_to(data.to_string().as_bytes(), &endpoint.address)
-                        .unwrap();
-
-                    println!(
-                        "Sent data to IP {}, ID_process: {:?}",
-                        endpoint.address,
-                        thread::current().id()
-                    );
                 }
             }
         }

@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///
 /// Хранит последнее значение цены для каждого тикера
 /// и использует его для генерации следующей котировки.
- pub struct QuoteGenerator {
+pub struct QuoteGenerator {
     /// Последняя сгенерированная цена по каждому тикеру
     last_prices: HashMap<String, f64>,
 }

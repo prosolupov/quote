@@ -1,37 +1,53 @@
 use crate::generat_data::QuoteGenerator;
 use crate::models::StockQuote;
 use crossbeam::channel::Sender;
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 
-/// Генерирует новую котировку для указанного тикера.
+/// Запускает единый генератор биржевых котировок.
 ///
-/// Возвращает `Some(StockQuote)` при успешной генерации
-/// или `None`, если генерация невозможна.
-fn create_generate(ticker: &str) -> Option<StockQuote> {
+/// Функция:
+/// - загружает список тикеров из файла,
+/// - создаёт один экземпляр `QuoteGenerator`,
+/// - в бесконечном цикле генерирует котировки по всем тикерам,
+/// - отправляет каждую котировку в переданный канал `tx`.
+///
+/// Генерация выполняется в цикле с задержкой 1 секунда.
+/// Работа функции завершается с ошибкой, если:
+/// - не удаётся прочитать файл с тикерами, или
+/// - получатель канала закрыт.
+fn create_generate(tx: Sender<StockQuote>) -> Result<(), Box<dyn Error>> {
+    let file: File = File::open("server/static/list_tickers.txt")?;
+    let reader = BufReader::new(file);
+    let mut tickers = reader.lines().collect::<Result<Vec<_>, _>>()?;
+
     let mut generate = QuoteGenerator::new();
-    let ticket: Option<StockQuote> = generate.generate_quote(ticker);
-    ticket
+
+    loop {
+        for ticker in tickers.iter_mut() {
+            if let Some(tick) = generate.generate_quote(ticker) {
+                tx.send(tick)?;
+            };
+        }
+        sleep(Duration::from_secs(1));
+    }
 }
 
-/// Запускает производителя котировок в отдельном потоке.
+/// Запускает единый генератор котировок в отдельном потоке.
 ///
-/// Функция периодически генерирует котировки для заданного тикера
-/// и отправляет их через канал. Работа потока завершается,
-/// если получатель канала закрыт или генерация невозможна.
-pub fn producer(ticker: String, tx: Sender<StockQuote>) {
+/// Функция создаёт фоновый поток, в котором выполняется `create_generate`.
+/// Основной поток при этом не блокируется.
+///
+/// Если генерация завершается с ошибкой (например, закрыт канал
+/// или недоступен файл с тикерами), ошибка логируется через `tracing::error`
+pub fn producer(tx: Sender<StockQuote>) {
     thread::spawn(move || {
-        loop {
-            if let Some(q) = create_generate(&ticker) {
-                if tx.send(q).is_err() {
-                    break;
-                }
-            } else {
-                eprintln!("No ticker specified");
-                break;
-            }
-            sleep(Duration::from_secs(5));
+        if let Err(e) = create_generate(tx) {
+            tracing::error!("Generator stopped: {}", e);
         }
     });
 }

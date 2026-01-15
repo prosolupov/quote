@@ -45,7 +45,7 @@ pub fn create_listener(port: String) -> Result<(), std::io::Error> {
 
                 if let Some(addr) = addr {
                     let _ = socket.send_to(b"ping", addr);
-                    println!("Sent ping to {}", addr);
+                    tracing::info!("Sent ping to {}", addr);
                 }
             }
         });
@@ -58,7 +58,7 @@ pub fn create_listener(port: String) -> Result<(), std::io::Error> {
             Ok((len, src)) => {
                 *last_src.lock().unwrap() = Some(src);
 
-                println!(
+                tracing::info!(
                     "Received {} bytes from {}: {}",
                     len,
                     src,
@@ -69,7 +69,7 @@ pub fn create_listener(port: String) -> Result<(), std::io::Error> {
                 thread::sleep(Duration::from_secs(3));
             }
             Err(e) => {
-                eprintln!("UDP error: {}", e);
+                tracing::error!("UDP error: {}", e);
             }
         }
     }
@@ -95,7 +95,7 @@ pub fn create_connection_server(commands: CliCommands) -> Result<(), std::io::Er
             tickers = result.replace('\n', ",");
         }
         Err(error) => {
-            eprintln!("{}", error);
+            tracing::error!("{}", error);
         }
     };
 
